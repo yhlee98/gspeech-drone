@@ -106,6 +106,20 @@ int set_socket(){
 
 }
 
+int altitude_check(Device &device, float altitude){
+    Telemetry::Position location;
+    float dalt;
+
+    location = device.telemetry().position();
+    dalt = location.relative_altitude_m - altitude;
+    if (dalt <= 2.5){
+        printf("Too low altitude: %f\n", dalt);
+        return 0;
+    }
+    else{
+        return 1;
+    }
+}
 
 
 int Drone_control(Device &device, std::vector<std::string> command){
@@ -136,7 +150,7 @@ int Drone_control(Device &device, std::vector<std::string> command){
         state_land = false;
        
         sleep_for(seconds(5));
-        device.offboard().set_velocity_ned({0.0f, 0.0f, 0.0f, 0.0f});
+        device.offboard().set_velocity_body({0.0f, 0.0f, 0.0f, 0.0f});
         Offboard::Result offboard_result = device.offboard().start();
         offboard_error_exit(offboard_result, "Offboard start failed");
         offboard_log(offb_mode, "Offboard started");
@@ -149,18 +163,26 @@ int Drone_control(Device &device, std::vector<std::string> command){
         vel_z = stof(command[3],0);
         duration = stoi(command[4],0);
 
+        if (!altitude_check(device, duration * vel_z)){
+                continue;
+        }
+
         offboard_log(offb_mode,  "Velocity control");
-        device.offboard().set_velocity_ned({vel_x, vel_y, vel_z, 0.0f});
+        device.offboard().set_velocity_body({vel_x, vel_y, vel_z, 0.0f});
         sleep_for(seconds(duration));
-        device.offboard().set_velocity_ned({0.0f, 0.0f, 0.0f, 0.0f});        
+        device.offboard().set_velocity_body({0.0f, 0.0f, 0.0f, 0.0f});        
     }
 
-    else if(command_input == "go"){
+    else if(command_input == "goto"){
 
         x = stof(command[1],0);
         y = stof(command[2],0);
         z = stof(command[3],0);
         velocity = stof(command[4],0);
+
+        if (!altitude_check(device, z)){
+            continue;
+        }
 
         vel_x = x*velocity/sqrt((x*x)+(y*y)+(z*z));
         vel_y = y*velocity/sqrt((x*x)+(y*y)+(z*z));
@@ -170,9 +192,9 @@ int Drone_control(Device &device, std::vector<std::string> command){
         std::cout << duration << std::endl;
 
         offboard_log(offb_mode,  "Position Control");
-        device.offboard().set_velocity_ned({vel_x, vel_y, vel_z, 0.0f});
+        device.offboard().set_velocity_body({vel_x, vel_y, vel_z, 0.0f});
         sleep_for(seconds(duration));
-        device.offboard().set_velocity_ned({0.0f, 0.0f, 0.0f, 0.0f});
+        device.offboard().set_velocity_body({0.0f, 0.0f, 0.0f, 0.0f});
     }
 
 
@@ -181,8 +203,10 @@ int Drone_control(Device &device, std::vector<std::string> command){
         degree = stof(command[1],0);
 
         offboard_log(offb_mode,  "Degree Control");
-        device.offboard().set_velocity_ned({0.0f, 0.0f, 0.0f, degree});
-        sleep_for(seconds(duration));
+        device.offboard().set_velocity_body({0.0f, 0.0f, 0.0f, 45});
+        duration = int(1000*degree/45);
+        sleep_for(milliseconds(duration));
+        device.offboard().set_velocity_body({0.0f, 0.0f, 0.0f, 0.0f});
     }
 
     else if(command_input == "land"){
@@ -204,11 +228,43 @@ int Drone_control(Device &device, std::vector<std::string> command){
     }
     else if(command_input == "offboard_start"){
 
-        device.offboard().set_velocity_ned({0.0f, 0.0f, 0.0f, 0.0f});
+        device.offboard().set_velocity_body({0.0f, 0.0f, 0.0f, 0.0f});
         Offboard::Result offboard_result = device.offboard().start();
         offboard_error_exit(offboard_result, "Offboard start failed");
         offboard_log(offb_mode, "Offboard started");
     }
+
+    else if (command_input == "navgoto"){
+
+
+        x = stof(command[1],0);
+        y = stof(command[2],0);
+        z = stof(command[3],0);        
+
+        location = device.telemetry().position();
+
+        x = (x - location.latitude_deg)*6400000*M_PI/180;
+        y = (y - location.longitude_deg)*6400000*M_PI/180;
+        z = -(z - location.absolute_altitude_m);
+
+
+        if (!altitude_check(device, z)){
+            continue;
+            }
+
+        vel_x = x*velocity/sqrt((x*x)+(y*y)+(z*z));
+        vel_y = y*velocity/sqrt((x*x)+(y*y)+(z*z));
+        vel_z = z*velocity/sqrt((x*x)+(y*y)+(z*z));
+
+        duration = int(sqrt((x*x)+(y*y)+(z*z))/velocity);
+
+        offboard_log(offb_mode,  "Position Control");
+        device.offboard().set_velocity_body({vel_x, vel_y, vel_z, 0.0f});
+        sleep_for(seconds(duration));
+        device.offboard().set_velocity_body({0.0f, 0.0f, 0.0f, 0.0f});
+
+    }
+
 
     else if(command_input == "quit"){
         if(state_land != true){
