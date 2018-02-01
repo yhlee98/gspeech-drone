@@ -131,6 +131,7 @@ int Drone_control(Device &device, std::vector<std::string> command){
     std::string command_input;
     Action::Result arm_result, takeoff_result, land_result;
     Offboard::Result offboard_result;
+    Telemetry::Position location;
 
 
     // Command input   
@@ -164,7 +165,7 @@ int Drone_control(Device &device, std::vector<std::string> command){
         duration = stoi(command[4],0);
 
         if (!altitude_check(device, duration * vel_z)){
-                continue;
+                return 0;
         }
 
         offboard_log(offb_mode,  "Velocity control");
@@ -181,7 +182,7 @@ int Drone_control(Device &device, std::vector<std::string> command){
         velocity = stof(command[4],0);
 
         if (!altitude_check(device, z)){
-            continue;
+            return 0;
         }
 
         vel_x = x*velocity/sqrt((x*x)+(y*y)+(z*z));
@@ -239,7 +240,8 @@ int Drone_control(Device &device, std::vector<std::string> command){
 
         x = stof(command[1],0);
         y = stof(command[2],0);
-        z = stof(command[3],0);        
+        z = stof(command[3],0);
+        velocity = stof(command[4],0);        
 
         location = device.telemetry().position();
 
@@ -249,7 +251,7 @@ int Drone_control(Device &device, std::vector<std::string> command){
 
 
         if (!altitude_check(device, z)){
-            continue;
+            return 0;
             }
 
         vel_x = x*velocity/sqrt((x*x)+(y*y)+(z*z));
